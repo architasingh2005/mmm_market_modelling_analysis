@@ -216,24 +216,41 @@ const SidebarFooter = ({ collapsed }) => {
         className="sidebar-footer-profile"
       >
         {/* Avatar */}
-        <div
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #6C63FF, #4F46E5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '12px',
-            fontWeight: '700',
-            color: '#fff',
-            flexShrink: 0,
-            boxShadow: '0 2px 8px rgba(108,99,255,0.35)',
-          }}
-        >
-          {user.initials}
-        </div>
+        {user?.profilePicture ? (
+          <img
+            src={user.profilePicture}
+            alt={user.name}
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              objectFit: 'cover',
+              flexShrink: 0,
+              border: '1px solid rgba(108,99,255,0.4)',
+              boxShadow: '0 2px 8px rgba(108,99,255,0.35)',
+            }}
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #6C63FF, #4F46E5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+              fontWeight: '700',
+              color: '#fff',
+              flexShrink: 0,
+              boxShadow: '0 2px 8px rgba(108,99,255,0.35)',
+            }}
+          >
+            {user.initials}
+          </div>
+        )}
 
         {/* Name + email */}
         {!collapsed && (

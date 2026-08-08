@@ -29,6 +29,11 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    profileImageSource: {
+      type: String,
+      enum: ['upload', 'url', 'none'],
+      default: 'none',
+    },
     isVerified: {
       type: Boolean,
       default: false,

@@ -275,7 +275,6 @@ const ProfileMenu = () => {
           width: '34px',
           height: '34px',
           borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6C63FF, #4F46E5)',
           border: open ? '2px solid rgba(108,99,255,0.6)' : '2px solid transparent',
           display: 'flex',
           alignItems: 'center',
@@ -286,10 +285,28 @@ const ProfileMenu = () => {
           color: '#fff',
           boxShadow: open ? '0 0 0 3px rgba(108,99,255,0.15)' : 'none',
           transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+          overflow: 'hidden',
+          padding: 0,
+          background: 'transparent',
         }}
         className="profile-avatar-btn"
       >
-        {user.initials}
+        {user?.profilePicture ? (
+          <img
+            src={user.profilePicture}
+            alt={user.name}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={(e) => { e.target.style.display = 'none'; }}
+          />
+        ) : (
+          <div style={{
+            width: '100%', height: '100%',
+            background: 'linear-gradient(135deg, #6C63FF, #4F46E5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            {user.initials}
+          </div>
+        )}
       </button>
 
       {open && (

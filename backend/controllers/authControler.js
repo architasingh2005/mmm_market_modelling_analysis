@@ -1,4 +1,7 @@
 import User from '../models/userModel.js';
+import Dataset from '../models/datasetModel.js';
+import Report from '../models/reportModel.js';
+import ChatHistory from '../models/chatHistoryModel.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
@@ -118,11 +121,25 @@ export async function getProfile(req, res) {
             });
         }
 
-        // Return user profile data
+        // Compute real database counts for authenticated user
+        const [datasetCount, reportCount, chatCount] = await Promise.all([
+            Dataset.countDocuments({ userId: req.user.id }),
+            Report.countDocuments({ userId: req.user.id }),
+            ChatHistory.countDocuments({ userId: req.user.id }),
+        ]);
+
+        const userObj = user.toObject();
+        userObj.stats = {
+            datasets: datasetCount,
+            reports: reportCount,
+            chats: chatCount,
+        };
+
+        // Return user profile data with real stats
         return res.status(200).json({
             message: "User profile fetched successfully",
             success: true,
-            user,
+            user: userObj,
         });
 
     } catch (err) {
@@ -135,12 +152,21 @@ export async function getProfile(req, res) {
 
 export async function updateProfile(req, res) {
     try {
-        const { name, profilePicture } = req.body;
+        const { name, profilePicture, profileImageSource } = req.body;
 
-        // Build an update object containing only allowed fields (name, profilePicture)
+        // Build updateData payload
         const updateData = {};
         if (name !== undefined) updateData.name = name;
-        if (profilePicture !== undefined) updateData.profilePicture = profilePicture;
+
+        if (profileImageSource === 'none' || (profilePicture !== undefined && !profilePicture.trim())) {
+            updateData.profilePicture = '';
+            updateData.profileImageSource = 'none';
+        } else if (profilePicture !== undefined) {
+            updateData.profilePicture = profilePicture;
+            if (profileImageSource) {
+                updateData.profileImageSource = profileImageSource;
+            }
+        }
 
         // Find user by ID and update allowed fields
         const updatedUser = await User.findByIdAndUpdate(
@@ -157,11 +183,75 @@ export async function updateProfile(req, res) {
             });
         }
 
+        // Include stats in response
+        const [datasetCount, reportCount, chatCount] = await Promise.all([
+            Dataset.countDocuments({ userId: req.user.id }),
+            Report.countDocuments({ userId: req.user.id }),
+            ChatHistory.countDocuments({ userId: req.user.id }),
+        ]);
+
+        const userObj = updatedUser.toObject();
+        userObj.stats = { datasets: datasetCount, reports: reportCount, chats: chatCount };
+
         // Return updated user profile
         return res.status(200).json({
             message: "Profile updated successfully",
             success: true,
-            user: updatedUser,
+            user: userObj,
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            message: err.message,
+            success: false,
+        });
+    }
+}
+
+export async function uploadAvatar(req, res) {
+    try {
+        if (!req.file) {
+            return res.status(400).json({
+                message: "Please select an image file to upload",
+                success: false,
+            });
+        }
+
+        // Construct public URL for uploaded avatar image
+        const host = req.get('host') || 'localhost:3001';
+        const protocol = req.protocol || 'http';
+        const avatarUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user.id,
+            {
+                profilePicture: avatarUrl,
+                profileImageSource: 'upload',
+            },
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                message: "User not found",
+                success: false,
+            });
+        }
+
+        // Include stats in response
+        const [datasetCount, reportCount, chatCount] = await Promise.all([
+            Dataset.countDocuments({ userId: req.user.id }),
+            Report.countDocuments({ userId: req.user.id }),
+            ChatHistory.countDocuments({ userId: req.user.id }),
+        ]);
+
+        const userObj = updatedUser.toObject();
+        userObj.stats = { datasets: datasetCount, reports: reportCount, chats: chatCount };
+
+        return res.status(200).json({
+            message: "Avatar uploaded successfully",
+            success: true,
+            user: userObj,
         });
 
     } catch (err) {
