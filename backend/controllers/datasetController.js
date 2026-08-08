@@ -17,7 +17,29 @@ export async function uploadDataset(req, res) {
         // Extract optional metadata from req.body
         const { datasetName, description } = req.body;
 
-        // Save dataset in MongoDB
+        // Check if a dataset with the same filename already has completed reports.
+        // This prevents duplicate orphan records from re-uploads.
+        const existing = await Dataset.findOne({
+            userId: req.user.id,
+            originalFilename: req.file.originalname,
+        });
+        if (existing) {
+            const existingReportCount = await Report.countDocuments({ datasetId: existing._id });
+            if (existingReportCount > 0) {
+                // Clean up the newly uploaded file since we won't process it
+                try {
+                    const fs = await import('fs');
+                    fs.unlinkSync(req.file.path);
+                } catch (_) { /* ignore cleanup errors */ }
+                return res.status(409).json({
+                    success: false,
+                    message: `A dataset named "${req.file.originalname}" has already been uploaded and analyzed. Delete the existing dataset first if you want to re-upload.`,
+                    existingDatasetId: existing._id,
+                });
+            }
+        }
+
+        // Save dataset record in MongoDB first so we have an _id to link reports to
         const dataset = await Dataset.create({
             userId: req.user.id,
             datasetName: datasetName || req.file.originalname,
@@ -29,63 +51,92 @@ export async function uploadDataset(req, res) {
             fileType: req.file.mimetype,
         });
 
-        // Call FastAPI AI endpoint for analysis
+        // ── Call FastAPI pipeline ────────────────────────────────────────────
         let aiResponse;
         try {
             const absoluteFilePath = path.resolve(dataset.filePath);
+            console.log(`[Dataset Upload] File: ${dataset.originalFilename}`);
+            console.log(`[Dataset Upload] Calling FastAPI → ${absoluteFilePath}`);
+
             aiResponse = await axios.post('http://127.0.0.1:8000/api/analyze', {
                 filePath: absoluteFilePath,
                 datasetId: dataset._id.toString(),
+            }, {
+                timeout: 120000, // 120 s — large CSVs can take time
             });
+
+            console.log(`[Dataset Upload] FastAPI done. Dataset type: ${aiResponse.data.datasetType}. Reports: ${aiResponse.data.reports?.length ?? 0}`);
         } catch (aiErr) {
-            console.error("FastAPI Axios error:", aiErr.response?.data || aiErr.message);
+            const errDetail = aiErr.response?.data?.detail || aiErr.response?.data || aiErr.message;
+            console.error('[Dataset Upload] FastAPI error:', errDetail);
+
+            // ── IMPORTANT: Delete the orphan dataset record so it doesn't litter
+            //    the DB with empty entries that confuse the chat context lookup.
+            try {
+                await Dataset.deleteOne({ _id: dataset._id });
+                console.log(`[Dataset Upload] Cleaned up orphan dataset record ${dataset._id}`);
+            } catch (cleanErr) {
+                console.warn('[Dataset Upload] Failed to clean up orphan dataset:', cleanErr.message);
+            }
+
             return res.status(500).json({
                 success: false,
-                message: "AI analysis failed",
-                error: aiErr.response?.data?.detail || aiErr.message,
+                message: 'AI analysis failed',
+                error: String(errDetail),
             });
         }
 
-        // Extract analysis data from FastAPI response
-        const { reportContent, summary } = aiResponse.data;
+        // ── Save each report as a separate document ──────────────────────────
+        const pipelineData = aiResponse.data;
+        const reportList = pipelineData.reports ?? [];
 
-        // Save Report document in MongoDB
-        let report;
-        try {
-            report = await Report.create({
-                userId: req.user.id,
-                datasetId: dataset._id,
-                reportType: 'summary',
-                title: dataset.datasetName || dataset.originalFilename || 'Data Understanding Report',
-                content: reportContent || '',
-                reportContent: reportContent || '',
-                summary: summary || {},
-                status: 'completed',
-                generatedAt: new Date(),
-            });
-        } catch (reportErr) {
-            console.error("Report save error:", reportErr.message);
+        if (reportList.length === 0) {
             return res.status(500).json({
                 success: false,
-                message: "Failed to save report in database",
-                error: reportErr.message,
+                message: 'FastAPI returned no reports. Check the pipeline logs.',
             });
+        }
+
+        const savedReports = [];
+        for (const rpt of reportList) {
+            try {
+                const saved = await Report.create({
+                    userId: req.user.id,
+                    datasetId: dataset._id,
+                    reportType: rpt.reportType || 'summary',
+                    title: rpt.title || 'Report',
+                    content: rpt.content || '',
+                    reportContent: rpt.content || '',
+                    summary: rpt.summary || {},
+                    status: 'completed',
+                    generatedAt: new Date(),
+                });
+                savedReports.push(saved);
+                console.log(`[Dataset Upload] Saved report: "${rpt.title}" (${rpt.reportType})`);
+            } catch (saveErr) {
+                console.error(`[Dataset Upload] Failed to save report "${rpt.title}":`, saveErr.message);
+                // Continue saving remaining reports even if one fails
+            }
         }
 
         return res.status(201).json({
             success: true,
-            message: "Dataset uploaded, analyzed and report saved successfully",
-            dataset: dataset,
-            report: report,
+            message: `Dataset uploaded. ${savedReports.length} report(s) generated.`,
+            dataset,
+            report: savedReports[0],   // kept for frontend compatibility
+            reports: savedReports,
+            datasetType: pipelineData.datasetType,
         });
 
     } catch (err) {
+        console.error('[Dataset Upload] Unexpected error:', err.message);
         return res.status(500).json({
             success: false,
             message: err.message,
         });
     }
 }
+
 
 // Get all datasets for the logged-in user
 export async function getAllDatasets(req, res) {
@@ -160,6 +211,52 @@ export async function deleteDataset(req, res) {
         return res.status(500).json({
             message: err.message,
             success: false,
+        });
+    }
+}
+
+// Get dynamic analytics payload for a specific dataset
+export async function getDatasetAnalytics(req, res) {
+    try {
+        const dataset = await Dataset.findOne({
+            _id: req.params.id,
+            userId: req.user.id,
+        });
+
+        if (!dataset) {
+            return res.status(404).json({
+                message: "Dataset not found",
+                success: false,
+            });
+        }
+
+        // Fetch associated reports
+        const reports = await Report.find({ datasetId: dataset._id });
+
+        // Forward request to FastAPI analytics service
+        const aiResponse = await axios.post('http://127.0.0.1:8000/api/analytics', {
+            filePath: path.resolve(dataset.filePath),
+            datasetId: dataset._id.toString(),
+            reports: reports.map(r => ({
+                title: r.title,
+                reportType: r.reportType,
+                content: r.reportContent || r.content,
+                reportContent: r.reportContent || r.content,
+                summary: r.summary || {},
+            })),
+        }, { timeout: 30000 });
+
+        return res.status(200).json({
+            success: true,
+            analytics: aiResponse.data,
+            dataset,
+        });
+
+    } catch (err) {
+        console.error("[DatasetController] getDatasetAnalytics error:", err.message);
+        return res.status(500).json({
+            success: false,
+            message: err.message,
         });
     }
 }

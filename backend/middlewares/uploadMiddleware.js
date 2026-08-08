@@ -32,10 +32,30 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-// Configure Multer upload middleware
+// Image filter for avatar uploads
+const avatarFilter = (req, file, cb) => {
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    const isImageMime = file.mimetype.startsWith('image/');
+
+    if (allowedExts.includes(ext) || isImageMime) {
+        cb(null, true);
+    } else {
+        cb(new Error('Only image files (.jpg, .png, .webp, .gif, .svg) are allowed!'), false);
+    }
+};
+
+// Configure Multer upload middleware for datasets
 const upload = multer({
     storage,
     fileFilter,
+});
+
+// Configure Multer upload middleware for profile avatars (5MB max)
+export const avatarUpload = multer({
+    storage,
+    fileFilter: avatarFilter,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
 });
 
 export default upload;

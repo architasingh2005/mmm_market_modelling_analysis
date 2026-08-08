@@ -1,6 +1,7 @@
 import express from 'express';
 import {
     sendMessage,
+    getSessions,
     getChatHistory,
     clearChatHistory,
 } from '../controllers/chatController.js';
@@ -8,15 +9,20 @@ import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Route 1: Send a message to the AI assistant (Protected)
+// POST /api/chat — send a message (requires sessionId in body)
 router.post('/', protect, sendMessage);
 
-// Route 2: Get chat history for a dataset (Protected - supports /:datasetId or /)
-router.get('/:datasetId', protect, getChatHistory);
-router.get('/', protect, getChatHistory);
+// GET /api/chat/sessions — list all conversation sessions for the sidebar
+router.get('/sessions', protect, getSessions);
 
-// Route 3: Clear chat history for a dataset (Protected - supports /:datasetId or /)
-router.delete('/:datasetId', protect, clearChatHistory);
+// GET /api/chat?sessionId=xxx — get messages for a session
+// GET /api/chat/:datasetId  — legacy: get messages by dataset (backward compat)
+router.get('/', protect, getChatHistory);
+router.get('/:datasetId', protect, getChatHistory);
+
+// DELETE /api/chat?sessionId=xxx — clear a session
+// DELETE /api/chat/:datasetId    — legacy clear by dataset
 router.delete('/', protect, clearChatHistory);
+router.delete('/:datasetId', protect, clearChatHistory);
 
 export default router;

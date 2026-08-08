@@ -5,7 +5,7 @@ Responsible for semantic document retrieval from Pinecone vector database.
 """
 
 import logging
-from typing import List
+from typing import List, Dict, Any, Optional
 
 from langchain_core.documents import Document
 
@@ -35,13 +35,14 @@ class Retriever:
             logger.error(f"Failed to initialize Retriever: {e}")
             raise RuntimeError(f"Initialization error: {e}")
 
-    def search(self, query: str, top_k: int = 5) -> List[Document]:
+    def search(self, query: str, top_k: int = 5, filter_dict: Optional[Dict[str, Any]] = None) -> List[Document]:
         """
         Search for the most relevant documents in Pinecone based on the query.
 
         Args:
             query (str): The search query string.
             top_k (int, optional): The number of top results to return. Defaults to 5.
+            filter_dict (Dict, optional): Metadata filter for Pinecone vector search. Defaults to None.
 
         Returns:
             List[Document]: A list of LangChain Document objects containing the relevant chunks.
@@ -56,7 +57,7 @@ class Retriever:
         if top_k <= 0:
             raise ValueError("top_k must be a positive integer.")
 
-        logger.info(f"Searching... Query: '{query}', top_k: {top_k}")
+        logger.info(f"Searching... Query: '{query}', top_k: {top_k}, filter: {filter_dict}")
 
         # 2. Generate query embedding
         try:
@@ -68,11 +69,14 @@ class Retriever:
 
         # 3. Search Pinecone
         try:
-            response = self.index.query(
-                vector=query_embedding,
-                top_k=top_k,
-                include_metadata=True
-            )
+            query_kwargs = {
+                "vector": query_embedding,
+                "top_k": top_k,
+                "include_metadata": True,
+            }
+            if filter_dict:
+                query_kwargs["filter"] = filter_dict
+            response = self.index.query(**query_kwargs)
         except Exception as e:
             logger.error(f"Pinecone search failed: {e}")
             raise RuntimeError(f"Pinecone connection/search failure: {e}")
