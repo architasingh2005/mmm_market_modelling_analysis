@@ -11,6 +11,7 @@ import Processing from '../pages/Processing';
 import Reports from '../pages/Reports';
 import ReportDetails from '../pages/ReportDetails';
 import Chat from '../pages/Chat';
+import Analytics from '../pages/Analytics';
 import Profile from '../pages/Profile';
 import NotFound from '../pages/NotFound';
 
@@ -34,6 +35,7 @@ const AppRoutes = () => {
           <Route path="/reports" element={<Reports />} />
           <Route path="/reports/:id" element={<ReportDetails />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/analytics" element={<Analytics />} />
           <Route path="/profile" element={<Profile />} />
         </Route>
       </Route>

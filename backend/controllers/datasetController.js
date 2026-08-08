@@ -214,3 +214,49 @@ export async function deleteDataset(req, res) {
         });
     }
 }
+
+// Get dynamic analytics payload for a specific dataset
+export async function getDatasetAnalytics(req, res) {
+    try {
+        const dataset = await Dataset.findOne({
+            _id: req.params.id,
+            userId: req.user.id,
+        });
+
+        if (!dataset) {
+            return res.status(404).json({
+                message: "Dataset not found",
+                success: false,
+            });
+        }
+
+        // Fetch associated reports
+        const reports = await Report.find({ datasetId: dataset._id });
+
+        // Forward request to FastAPI analytics service
+        const aiResponse = await axios.post('http://127.0.0.1:8000/api/analytics', {
+            filePath: path.resolve(dataset.filePath),
+            datasetId: dataset._id.toString(),
+            reports: reports.map(r => ({
+                title: r.title,
+                reportType: r.reportType,
+                content: r.reportContent || r.content,
+                reportContent: r.reportContent || r.content,
+                summary: r.summary || {},
+            })),
+        }, { timeout: 30000 });
+
+        return res.status(200).json({
+            success: true,
+            analytics: aiResponse.data,
+            dataset,
+        });
+
+    } catch (err) {
+        console.error("[DatasetController] getDatasetAnalytics error:", err.message);
+        return res.status(500).json({
+            success: false,
+            message: err.message,
+        });
+    }
+}

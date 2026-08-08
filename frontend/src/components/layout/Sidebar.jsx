@@ -28,7 +28,7 @@ const NAV_SECTIONS = [
       { id: 'upload',    label: 'Upload Dataset', icon: UploadCloud,      to: '/upload'     },
       { id: 'reports',   label: 'Reports',        icon: FileText,          to: '/reports'    },
       { id: 'chat',      label: 'AI Chat',         icon: MessageSquare,    to: '/chat'       },
-      { id: 'analytics', label: 'Analytics',       icon: BarChart3,        to: '/dashboard'  },
+      { id: 'analytics', label: 'Analytics',       icon: BarChart3,        to: '/analytics'  },
     ],
   },
   {

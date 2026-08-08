@@ -4,6 +4,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 from pathlib import Path
+import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -65,6 +66,12 @@ class ChatRequest(BaseModel):
     history: Optional[List[HistoryTurn]] = []   # previous conversation turns
 
 
+class AnalyticsRequest(BaseModel):
+    filePath: Optional[str] = None
+    datasetId: Optional[str] = None
+    reports: Optional[List[ReportData]] = []
+
+
 # ── Health ───────────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -104,6 +111,75 @@ def analyze_dataset(payload: AnalyzeRequest):
     except Exception as e:
         print(f"[FastAPI] /api/analyze error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Dataset Analytics Endpoint ───────────────────────────────────────────────
+
+@app.post("/api/analytics")
+def get_analytics(payload: AnalyticsRequest):
+    """
+    Computes real dataset analytics, KPIs, sales performance, MMM insights, and correlation matrix.
+    """
+    dataset_id = payload.datasetId or "dataset"
+    file_path = payload.filePath
+
+    # Locate dataset file dynamically
+    df = None
+    candidate_paths = []
+    if file_path:
+        candidate_paths.extend([
+            Path(file_path),
+            PROJECT_ROOT / file_path,
+            PROJECT_ROOT / "backend" / file_path,
+            PROJECT_ROOT / "backend" / "uploads" / Path(file_path).name,
+            PROJECT_ROOT / "uploads" / Path(file_path).name,
+        ])
+
+    # Search candidate paths
+    for p in candidate_paths:
+        if p.exists() and p.is_file():
+            try:
+                if p.suffix.lower() == ".csv":
+                    df = pd.read_csv(p)
+                elif p.suffix.lower() in (".xls", ".xlsx"):
+                    df = pd.read_excel(p)
+                print(f"[FastAPI Analytics] Successfully loaded dataset from {p}. Shape: {df.shape}")
+                break
+            except Exception as e:
+                print(f"[FastAPI Analytics] Error reading {p}: {e}")
+
+    # Fallback search by dataset_id in backend/uploads and uploads
+    if df is None and dataset_id:
+        search_dirs = [PROJECT_ROOT / "backend" / "uploads", PROJECT_ROOT / "uploads"]
+        for sdir in search_dirs:
+            if sdir.exists():
+                for fname in os.listdir(sdir):
+                    if dataset_id in fname or (file_path and Path(file_path).name in fname):
+                        fpath = sdir / fname
+                        try:
+                            if fname.endswith(".csv"):
+                                df = pd.read_csv(fpath)
+                            elif fname.endswith((".xls", ".xlsx")):
+                                df = pd.read_excel(fpath)
+                            print(f"[FastAPI Analytics] Loaded dataset from dir search: {fpath}. Shape: {df.shape}")
+                            break
+                        except Exception as e:
+                            print(f"[FastAPI Analytics] Dir search read error: {e}")
+                if df is not None:
+                    break
+
+    reports_dicts = []
+    for rpt in (payload.reports or []):
+        reports_dicts.append({
+            "title":         rpt.title,
+            "reportType":    rpt.reportType,
+            "content":       rpt.content or rpt.reportContent,
+            "reportContent": rpt.reportContent or rpt.content,
+            "summary":       rpt.summary or {},
+        })
+
+    from app.analytics_engine import generate_dataset_analytics
+    return generate_dataset_analytics(df, dataset_id, reports_dicts)
 
 
 # ── Multi-Source RAG Chat ─────────────────────────────────────────────────────
