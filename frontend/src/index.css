@@ -10,13 +10,13 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #FAFAFA;
-  color: #111827;
+  background-color: #0B0B0D;
+  color: #E8E8F0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
-  background-color: #FAFAFA;
+  background-color: #0B0B0D;
 }

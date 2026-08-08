@@ -1,12 +1,13 @@
 import { Routes, Route } from 'react-router-dom';
 import ProtectedRoute from './ProtectedRoute';
-import MainLayout from '../components/layout/MainLayout';
+import DashboardLayout from '../components/layout/DashboardLayout';
 import Home from '../pages/Home';
 import About from '../pages/About';
 import Login from '../pages/auth/Login';
 import Register from '../pages/auth/Register';
 import Dashboard from '../pages/Dashboard';
 import UploadDataset from '../pages/UploadDataset';
+import Processing from '../pages/Processing';
 import Reports from '../pages/Reports';
 import ReportDetails from '../pages/ReportDetails';
 import Chat from '../pages/Chat';
@@ -26,9 +27,10 @@ const AppRoutes = () => {
 
       {/* Protected Routes inside Shared Dashboard Layout */}
       <Route element={<ProtectedRoute />}>
-        <Route element={<MainLayout />}>
+        <Route element={<DashboardLayout />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/upload" element={<UploadDataset />} />
+          <Route path="/processing" element={<Processing />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/reports/:id" element={<ReportDetails />} />
           <Route path="/chat" element={<Chat />} />

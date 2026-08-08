@@ -6,7 +6,7 @@ Responsible only for retrieving relevant documents from the vector database.
 """
 
 import logging
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Tuple, Optional, Dict
 
 from langchain_core.documents import Document
 from src.retrieval.retriever import Retriever
@@ -59,13 +59,14 @@ class QueryEngine:
             raise ValueError("Query cannot be an empty string.")
         return query.strip()
 
-    def search(self, query: str, top_k: int = 5) -> List[Document]:
+    def search(self, query: str, top_k: int = 5, filter_dict: Optional[Dict[str, Any]] = None) -> List[Document]:
         """
         Retrieve relevant documents for a given query.
 
         Args:
             query (str): Search query string.
             top_k (int, optional): Number of top results to retrieve. Defaults to 5.
+            filter_dict (Dict, optional): Metadata filter dictionary for vector search. Defaults to None.
 
         Returns:
             List[Document]: List of LangChain Document objects.
@@ -74,7 +75,7 @@ class QueryEngine:
             ValueError: If query is invalid.
         """
         self._validate_query(query)
-        results = self.retriever.search(query, top_k=top_k)
+        results = self.retriever.search(query, top_k=top_k, filter_dict=filter_dict)
         return results if results is not None else []
 
     def search_with_scores(self, query: str, top_k: int = 5) -> List[Tuple[Document, float]]:

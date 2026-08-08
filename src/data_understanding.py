@@ -7,6 +7,8 @@ Includes functions for loading, analyzing, and generating insights from data.
 
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend — prevents GUI window hang on Windows/servers
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path

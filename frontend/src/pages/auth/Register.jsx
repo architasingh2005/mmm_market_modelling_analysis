@@ -103,6 +103,7 @@ const Register = () => {
   const [loading, setLoading]           = useState(false);
   const [focusedField, setFocusedField] = useState(null);
   const [cardFloat, setCardFloat]       = useState(0);
+  const [error, setError]               = useState('');
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
 
   useEffect(() => {
@@ -122,13 +123,47 @@ const Register = () => {
 
   const handleChange = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    if (form.password !== form.confirm) {
+      setError('Passwords do not match.');
+      return;
+    }
     setLoading(true);
-    setTimeout(() => {
-      localStorage.setItem('token', 'demo-token-12345');
+    try {
+      const res = await fetch(
+        (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api') + '/auth/register',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: form.name, email: form.email, password: form.password }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Registration failed');
+      }
+      // After register, log in automatically to get a token
+      const loginRes = await fetch(
+        (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api') + '/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email, password: form.password }),
+        }
+      );
+      const loginData = await loginRes.json();
+      if (!loginRes.ok || !loginData.success) {
+        throw new Error(loginData.message || 'Auto-login failed. Please log in manually.');
+      }
+      localStorage.setItem('token', loginData.token);
+      localStorage.setItem('user', JSON.stringify(loginData.user));
       window.location.href = '/dashboard';
-    }, 1400);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
   };
 
   const inputStyle = (field) => ({
@@ -354,6 +389,21 @@ const Register = () => {
                 </button>
               </div>
             </div>
+
+            {/* Error message */}
+            {error && (
+              <div style={{
+                background: 'rgba(248,113,113,0.08)',
+                border: '1px solid rgba(248,113,113,0.22)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                color: '#F87171',
+                fontSize: '12.5px',
+                fontWeight: 500,
+              }}>
+                {error}
+              </div>
+            )}
 
             {/* Submit */}
             <button

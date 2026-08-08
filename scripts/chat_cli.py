@@ -108,7 +108,8 @@ def main() -> None:
 
         try:
             start_time = time.time()
-            answer = service.ask(question)
+            res = service.ask(question)
+            answer = res["answer"] if isinstance(res, dict) else res
             end_time = time.time()
             
             elapsed = end_time - start_time

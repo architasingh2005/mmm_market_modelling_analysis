@@ -1,134 +1,514 @@
-import { NavLink } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useCurrentUser } from '../../services/useCurrentUser';
 import {
   LayoutDashboard,
-  Upload,
+  UploadCloud,
   FileText,
   MessageSquare,
-  User,
-  LogOut,
-  X,
+  BarChart3,
+  Info,
+  Settings,
   Sparkles,
-  Activity,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  User,
 } from 'lucide-react';
+import { useSidebar } from './SidebarContext';
 
-const Sidebar = ({ isOpen, onClose }) => {
-  const navSections = [
-    {
-      title: 'ANALYTICS ENGINE',
-      items: [
-        { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard, shortcut: '⌘D' },
-        { name: 'Upload Dataset', path: '/upload', icon: Upload, shortcut: '⌘U' },
-        { name: 'AI Reports', path: '/reports', icon: FileText, shortcut: '⌘R' },
-        { name: 'RAG Assistant', path: '/chat', icon: MessageSquare, shortcut: '⌘C' },
-      ],
-    },
-    {
-      title: 'ACCOUNT',
-      items: [
-        { name: 'User Profile', path: '/profile', icon: User },
-      ],
-    },
-  ];
+/* ─── Navigation definition ──────────────────────────────────────────────── */
+
+const NAV_SECTIONS = [
+  {
+    id: 'main',
+    label: 'Workspace',
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, to: '/dashboard' },
+      { id: 'upload',    label: 'Upload Dataset', icon: UploadCloud,      to: '/upload'     },
+      { id: 'reports',   label: 'Reports',        icon: FileText,          to: '/reports'    },
+      { id: 'chat',      label: 'AI Chat',         icon: MessageSquare,    to: '/chat'       },
+      { id: 'analytics', label: 'Analytics',       icon: BarChart3,        to: '/dashboard'  },
+    ],
+  },
+  {
+    id: 'misc',
+    label: 'General',
+    items: [
+      { id: 'about',    label: 'About',    icon: Info,     to: '/about'    },
+      { id: 'settings', label: 'Settings', icon: Settings, to: '/profile'  },
+    ],
+  },
+];
+
+
+const SIDEBAR_EXPANDED = 270;
+const SIDEBAR_COLLAPSED = 84;
+
+/* ─── Sub-components ──────────────────────────────────────────────────────── */
+
+// SidebarItem — a single nav link with tooltip support in collapsed mode.
+const SidebarItem = ({ item, collapsed }) => {
+  const Icon = item.icon;
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {/* React Router NavLink automatically applies active styles based on the current route. */}
+      <NavLink
+        to={item.to}
+        end={item.to === '/dashboard'}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={({ isActive }) => ({
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: collapsed ? '10px 0' : '9px 12px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          borderRadius: '10px',
+          textDecoration: 'none',
+          position: 'relative',
+          transition: 'background 0.15s ease, color 0.15s ease',
+          backgroundColor: isActive
+            ? 'rgba(108,99,255,0.12)'
+            : hovered
+            ? 'rgba(255,255,255,0.05)'
+            : 'transparent',
+          color: isActive ? '#8B83FF' : 'rgba(240,240,248,0.55)',
+          boxShadow: isActive ? '0 0 0 1px rgba(108,99,255,0.2) inset' : 'none',
+        })}
+      >
+        {({ isActive }) => (
+          <>
+            {/* Active left indicator bar */}
+            {isActive && (
+              <span
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: '3px',
+                  height: '18px',
+                  borderRadius: '0 3px 3px 0',
+                  backgroundColor: '#6C63FF',
+                  boxShadow: '0 0 8px rgba(108,99,255,0.6)',
+                }}
+              />
+            )}
+
+            <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+              <Icon
+                size={18}
+                style={{
+                  color: isActive ? '#8B83FF' : hovered ? 'rgba(240,240,248,0.75)' : 'rgba(240,240,248,0.4)',
+                  transition: 'color 0.15s ease',
+                }}
+              />
+            </span>
+
+            {/* Label fades out on collapse */}
+            {!collapsed && (
+              <span
+                style={{
+                  fontSize: '13.5px',
+                  fontWeight: isActive ? '600' : '500',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  letterSpacing: '-0.1px',
+                  transition: 'opacity 0.2s ease',
+                }}
+              >
+                {item.label}
+              </span>
+            )}
+          </>
+        )}
+      </NavLink>
+
+      {/* Tooltip — only shown in collapsed mode */}
+      {collapsed && hovered && (
+        <div
+          style={{
+            position: 'fixed',
+            left: `${SIDEBAR_COLLAPSED + 10}px`,
+            transform: 'translateY(-50%)',
+            backgroundColor: '#1E1E26',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '8px',
+            padding: '6px 12px',
+            fontSize: '12px',
+            fontWeight: '500',
+            color: '#F0F0F8',
+            whiteSpace: 'nowrap',
+            zIndex: 999,
+            pointerEvents: 'none',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          }}
+        >
+          {item.label}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// SidebarSection — groups nav items under a labelled heading.
+const SidebarSection = ({ section, collapsed }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+    {!collapsed && (
+      <p
+        style={{
+          fontSize: '10px',
+          fontWeight: '600',
+          letterSpacing: '1px',
+          textTransform: 'uppercase',
+          color: 'rgba(240,240,248,0.2)',
+          fontFamily: 'monospace',
+          margin: '0 0 6px 12px',
+        }}
+      >
+        {section.label}
+      </p>
+    )}
+    {section.items.map((item) => (
+      <SidebarItem key={item.id} item={item} collapsed={collapsed} />
+    ))}
+  </div>
+);
+
+// SidebarFooter — user profile card + logout.
+const SidebarFooter = ({ collapsed }) => {
+  const navigate = useNavigate();
+  const user = useCurrentUser();
 
   const handleLogout = () => {
     localStorage.removeItem('token');
-    window.location.href = '/login';
+    localStorage.removeItem('user');
+    navigate('/login');
   };
 
   return (
-    <>
-      {/* Mobile Backdrop */}
-      {isOpen && (
+    <div
+      style={{
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        padding: collapsed ? '16px 10px' : '16px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+      }}
+    >
+      {/* Profile card */}
+      <NavLink
+        to="/profile"
+        style={({ isActive }) => ({
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          padding: collapsed ? '8px 0' : '8px 10px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          borderRadius: '10px',
+          textDecoration: 'none',
+          backgroundColor: isActive ? 'rgba(108,99,255,0.1)' : 'transparent',
+          transition: 'background 0.15s ease',
+        })}
+        className="sidebar-footer-profile"
+      >
+        {/* Avatar */}
         <div
-          className="fixed inset-0 bg-gray-900/40 backdrop-blur-xs z-30 md:hidden transition-opacity"
-          onClick={onClose}
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #6C63FF, #4F46E5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            fontWeight: '700',
+            color: '#fff',
+            flexShrink: 0,
+            boxShadow: '0 2px 8px rgba(108,99,255,0.35)',
+          }}
+        >
+          {user.initials}
+        </div>
+
+        {/* Name + email */}
+        {!collapsed && (
+          <div style={{ minWidth: 0 }}>
+            <p
+              style={{
+                fontSize: '13px',
+                fontWeight: '600',
+                color: 'rgba(240,240,248,0.85)',
+                margin: 0,
+                lineHeight: 1.2,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {user.name}
+            </p>
+            <p
+              style={{
+                fontSize: '11px',
+                color: 'rgba(240,240,248,0.3)',
+                margin: 0,
+                lineHeight: 1.3,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                fontFamily: 'monospace',
+              }}
+            >
+              {user.email}
+            </p>
+          </div>
+        )}
+      </NavLink>
+
+      {/* Logout */}
+      <button
+        onClick={handleLogout}
+        title="Sign Out"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          padding: collapsed ? '8px 0' : '8px 10px',
+          borderRadius: '10px',
+          border: 'none',
+          background: 'transparent',
+          color: 'rgba(248,113,113,0.6)',
+          fontSize: '13px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          width: '100%',
+          transition: 'background 0.15s ease, color 0.15s ease',
+        }}
+        className="sidebar-logout-btn"
+      >
+        <LogOut size={16} />
+        {!collapsed && <span>Sign Out</span>}
+      </button>
+
+      <style>{`
+        .sidebar-footer-profile:hover { background: rgba(255,255,255,0.05) !important; }
+        .sidebar-logout-btn:hover { background: rgba(248,113,113,0.08) !important; color: #F87171 !important; }
+      `}</style>
+    </div>
+  );
+};
+
+/* ─── Main Sidebar component ──────────────────────────────────────────────── */
+
+const Sidebar = () => {
+  const { collapsed, toggle, mobileOpen, closeMobile } = useSidebar();
+
+  return (
+    <>
+      {/* Mobile overlay backdrop */}
+      {mobileOpen && (
+        <div
+          onClick={closeMobile}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.55)',
+            backdropFilter: 'blur(2px)',
+            zIndex: 39,
+          }}
         />
       )}
 
-      {/* Sidebar Container (Linear & Notion Inspired Light Theme) */}
       <aside
-        className={`fixed top-0 left-0 bottom-0 w-64 bg-white border-r border-gray-200 z-40 flex flex-col transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        style={{
+          width: collapsed ? `${SIDEBAR_COLLAPSED}px` : `${SIDEBAR_EXPANDED}px`,
+          height: '100vh',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          backgroundColor: '#111114',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 40,
+          // Smooth width collapse transition
+          transition: 'width 0.3s cubic-bezier(0.4,0,0.2,1), transform 0.3s cubic-bezier(0.4,0,0.2,1)',
+          overflow: 'hidden',
+          // On mobile: slide in as drawer; on desktop: always visible
+          transform: mobileOpen ? 'translateX(0)' : undefined,
+        }}
+        className="sidebar-root"
       >
-        {/* Workspace Brand Switcher */}
-        <div className="h-16 px-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-3 w-full">
-            <div className="w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shadow-md shadow-indigo-600/20">
-              <Sparkles className="w-4 h-4 text-white" />
+        {/* ── Brand header ── */}
+        <div
+          style={{
+            height: '64px',
+            padding: collapsed ? '0' : '0 16px 0 18px',
+            justifyContent: collapsed ? 'center' : 'space-between',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            flexShrink: 0,
+          }}
+        >
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <div
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #6C63FF 0%, #4F46E5 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 14px rgba(108,99,255,0.35)',
+                flexShrink: 0,
+              }}
+            >
+              <Sparkles size={16} color="#fff" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-gray-900 truncate tracking-tight">MarketMindAI</p>
-              <p className="text-[10px] font-mono text-emerald-600 flex items-center gap-1.5 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                FastAPI Connected
-              </p>
-            </div>
+
+            {!collapsed && (
+              <div style={{ minWidth: 0 }}>
+                <p
+                  style={{
+                    fontSize: '14px',
+                    fontWeight: '700',
+                    color: '#F0F0F5',
+                    letterSpacing: '-0.3px',
+                    margin: 0,
+                    lineHeight: 1.1,
+                  }}
+                >
+                  MarketMindAI
+                </p>
+                <p
+                  style={{
+                    fontSize: '10px',
+                    color: '#4ADE80',
+                    fontFamily: 'monospace',
+                    margin: 0,
+                    lineHeight: 1.4,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: '5px',
+                      height: '5px',
+                      borderRadius: '50%',
+                      backgroundColor: '#4ADE80',
+                      boxShadow: '0 0 5px #4ADE80',
+                      display: 'inline-block',
+                    }}
+                  />
+                  Connected
+                </p>
+              </div>
+            )}
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 md:hidden"
-          >
-            <X className="w-5 h-5" />
-          </button>
+
+          {/* Collapse toggle button — only visible on desktop */}
+          {!collapsed && (
+            <button
+              onClick={toggle}
+              title="Collapse sidebar"
+              style={{
+                width: '26px',
+                height: '26px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'rgba(255,255,255,0.04)',
+                color: 'rgba(240,240,248,0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                flexShrink: 0,
+                transition: 'background 0.15s ease, color 0.15s ease',
+              }}
+              className="sidebar-collapse-btn"
+            >
+              <ChevronLeft size={14} />
+            </button>
+          )}
         </div>
 
-        {/* Navigation Sections */}
-        <nav className="flex-1 px-3 py-5 space-y-6 overflow-y-auto">
-          {navSections.map((section, idx) => (
-            <div key={idx} className="space-y-1">
-              <p className="px-3 text-[10px] font-mono font-semibold text-gray-400 uppercase tracking-wider">
-                {section.title}
-              </p>
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={onClose}
-                    className={({ isActive }) =>
-                      `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
-                        isActive
-                          ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-xs'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`
-                    }
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className="w-4 h-4" />
-                      <span>{item.name}</span>
-                    </div>
-                    {item.shortcut && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-400 border border-gray-200">
-                        {item.shortcut}
-                      </span>
-                    )}
-                  </NavLink>
-                );
-              })}
-            </div>
+        {/* Expand button when collapsed */}
+        {collapsed && (
+          <button
+            onClick={toggle}
+            title="Expand sidebar"
+            style={{
+              margin: '12px auto 0',
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(255,255,255,0.04)',
+              color: 'rgba(240,240,248,0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              flexShrink: 0,
+              transition: 'background 0.15s ease, color 0.15s ease',
+            }}
+            className="sidebar-collapse-btn"
+          >
+            <ChevronRight size={14} />
+          </button>
+        )}
+
+        {/* ── Navigation ── */}
+        <nav
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: collapsed ? '16px 10px' : '16px 12px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px',
+            scrollbarWidth: 'none',
+          }}
+        >
+          {NAV_SECTIONS.map((section) => (
+            <SidebarSection key={section.id} section={section} collapsed={collapsed} />
           ))}
         </nav>
 
-        {/* Bottom System Status & User Logout Footer */}
-        <div className="p-3 border-t border-gray-100 space-y-2">
-          <div className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-between text-[11px] text-gray-600 font-medium">
-            <span className="flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-indigo-600" /> Pipeline Status
-            </span>
-            <span className="font-mono text-emerald-600 font-bold">Active</span>
-          </div>
-
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-rose-600 hover:bg-rose-50 transition"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Sign Out</span>
-          </button>
-        </div>
+        {/* ── Footer ── */}
+        <SidebarFooter collapsed={collapsed} />
       </aside>
+
+      <style>{`
+        .sidebar-root { scrollbar-width: none; }
+        .sidebar-root::-webkit-scrollbar { display: none; }
+        .sidebar-collapse-btn:hover {
+          background: rgba(255,255,255,0.08) !important;
+          color: rgba(240,240,248,0.7) !important;
+        }
+
+        /* Mobile: sidebar hidden by default, slides in as drawer */
+        @media (max-width: 768px) {
+          .sidebar-root {
+            transform: ${mobileOpen ? 'translateX(0)' : 'translateX(-100%)'} !important;
+            width: 270px !important;
+            box-shadow: 4px 0 32px rgba(0,0,0,0.5);
+          }
+        }
+      `}</style>
     </>
   );
 };

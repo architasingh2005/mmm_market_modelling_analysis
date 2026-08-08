@@ -7,7 +7,7 @@ and response generation to LLMClient.
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Dict, List
 
 from src.rag.llm_client import LLMClient
 from src.rag.prompt_builder import PromptBuilder
@@ -67,16 +67,24 @@ class MarketingRAGService:
             raise ValueError("Question cannot be empty.")
         return question.strip()
 
-    def ask(self, question: str, top_k: int = 5) -> str:
+    def ask(
+        self,
+        question: str,
+        top_k: int = 5,
+        filter_dict: Optional[Dict[str, Any]] = None,
+        documents_override: Optional[List[Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Answer a user question by orchestrating QueryEngine, PromptBuilder, and LLMClient.
 
         Args:
             question (str): The user's question.
             top_k (int, optional): Number of documents to retrieve. Defaults to 5.
+            filter_dict (Optional[Dict]): Metadata filter for vector search.
+            documents_override (Optional[List]): Pre-supplied documents/chunks.
 
         Returns:
-            str: The generated answer from the LLM.
+            Dict[str, Any]: Answer text, retrieved count, and context documents.
 
         Raises:
             ValueError: If question validation fails.
@@ -86,9 +94,15 @@ class MarketingRAGService:
         cleaned_question = self._validate_question(question)
         logger.info(f"Processing question: '{cleaned_question}'")
 
-        # Step 2: Retrieve relevant documents using QueryEngine
-        logger.info("Retrieving documents via QueryEngine.")
-        documents = self.query_engine.search(cleaned_question, top_k=top_k)
+        # Step 2: Retrieve relevant documents using QueryEngine or documents_override
+        if documents_override is not None:
+            documents = documents_override
+            logger.info(f"Using {len(documents)} pre-supplied document chunks.")
+        else:
+            logger.info(f"Retrieving documents via QueryEngine with filter={filter_dict}.")
+            documents = self.query_engine.search(cleaned_question, top_k=top_k, filter_dict=filter_dict)
+
+        logger.info(f"Retrieved {len(documents)} document chunk(s).")
 
         # Step 3: Build prompt using PromptBuilder
         logger.info("Building RAG prompt via PromptBuilder.")
@@ -98,4 +112,8 @@ class MarketingRAGService:
         logger.info("Generating response via LLMClient.")
         answer = self.llm_client.generate(prompt)
 
-        return answer
+        return {
+            "answer": answer,
+            "retrieved_documents": len(documents),
+            "documents": documents,
+        }

@@ -40,7 +40,8 @@ def run_tests():
     q1 = "What improved during Q2 marketing performance?"
     def test2():
         nonlocal ans1
-        ans1 = service.ask(q1)
+        res = service.ask(q1)
+        ans1 = res["answer"] if isinstance(res, dict) else res
         if not isinstance(ans1, str):
             raise AssertionError(f"Expected string return type, got {type(ans1)}")
         if not ans1.strip():
@@ -52,7 +53,8 @@ def run_tests():
     q2 = "What is the sales forecast for next quarter?"
     def test3():
         nonlocal ans2
-        ans2 = service.ask(q2)
+        res = service.ask(q2)
+        ans2 = res["answer"] if isinstance(res, dict) else res
         if not isinstance(ans2, str):
             raise AssertionError(f"Expected string return type, got {type(ans2)}")
         if not ans2.strip():
@@ -64,7 +66,8 @@ def run_tests():
     q4 = "Who won the FIFA World Cup in 2018?"
     def test4():
         nonlocal ans4
-        ans4 = service.ask(q4)
+        res = service.ask(q4)
+        ans4 = res["answer"] if isinstance(res, dict) else res
         if not isinstance(ans4, str) or not ans4.strip():
             raise AssertionError("Returned answer for unknown question is empty or not a string.")
         lower_ans = ans4.lower()

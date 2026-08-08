@@ -1,9 +1,11 @@
 import Report from '../models/reportModel.js';
+import Dataset from '../models/datasetModel.js';
 
 // Get all reports for the logged-in user (excludes heavy report text to optimize response size)
 export async function getAllReports(req, res) {
     try {
         const reports = await Report.find({ userId: req.user.id })
+            .populate('datasetId', 'datasetName originalFilename createdAt')
             .select('-content -reportContent')
             .sort({ createdAt: -1 });
 
@@ -14,6 +16,7 @@ export async function getAllReports(req, res) {
             reports,
         });
     } catch (err) {
+        console.error("getAllReports error:", err);
         return res.status(500).json({
             success: false,
             message: err.message,

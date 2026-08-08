@@ -15,7 +15,14 @@ const reportSchema = new mongoose.Schema(
     reportType: {
       type: String,
       required: [true, 'Report type is required'],
-      enum: ['forecast', 'sentiment', 'marketing', 'business_insights', 'summary'],
+      enum: [
+        'summary',           // Dataset Understanding / Executive Summary
+        'forecast',          // Sales Forecast
+        'sentiment',         // Sentiment Analysis
+        'marketing',         // Market Mix Modeling / Marketing Performance
+        'business_insights', // General Business Insights
+        'executive',         // Executive Dashboard
+      ],
       default: 'summary',
     },
     title: {

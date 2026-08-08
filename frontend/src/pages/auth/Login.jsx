@@ -108,6 +108,7 @@ const Login = () => {
   const [password, setPassword]         = useState('');
   const [focusedField, setFocusedField] = useState(null);
   const [cardFloat, setCardFloat]       = useState(0);
+  const [error, setError]               = useState('');
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -125,13 +126,30 @@ const Login = () => {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      localStorage.setItem('token', 'demo-token-12345');
+    setError('');
+    try {
+      const res = await fetch(
+        (import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api') + '/auth/login',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Login failed');
+      }
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
       window.location.href = '/dashboard';
-    }, 1200);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
   };
 
   const inputStyle = (field) => ({
@@ -329,6 +347,21 @@ const Login = () => {
                 </button>
               </div>
             </div>
+
+            {/* Error message */}
+            {error && (
+              <div style={{
+                background: 'rgba(248,113,113,0.08)',
+                border: '1px solid rgba(248,113,113,0.22)',
+                borderRadius: 10,
+                padding: '10px 14px',
+                color: '#F87171',
+                fontSize: '12.5px',
+                fontWeight: 500,
+              }}>
+                {error}
+              </div>
+            )}
 
             {/* Submit */}
             <button
