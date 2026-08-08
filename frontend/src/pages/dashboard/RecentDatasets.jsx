@@ -1,37 +1,26 @@
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Database, ArrowUpRight, Eye } from 'lucide-react';
+import { Database, ArrowUpRight, Eye, RefreshCw, Folder } from 'lucide-react';
 
-// Placeholder data — replace with backend API response when ready.
-const datasets = [
-  {
-    id: 'ds-001',
-    name: 'synthetic_mmm_weekly_india.csv',
-    uploadedAt: 'Today, 10:42 AM',
-    status: 'Ready',
-    rows: '109,795',
-  },
-  {
-    id: 'ds-002',
-    name: 'q2_customer_sentiment_2024.csv',
-    uploadedAt: 'Yesterday, 3:18 PM',
-    status: 'Processing',
-    rows: '45,210',
-  },
-  {
-    id: 'ds-003',
-    name: 'brand_spend_channels_q3.xlsx',
-    uploadedAt: 'Jul 29, 9:05 AM',
-    status: 'Ready',
-    rows: '22,480',
-  },
-  {
-    id: 'ds-004',
-    name: 'media_mix_attribution_v2.csv',
-    uploadedAt: 'Jul 27, 2:00 PM',
-    status: 'Error',
-    rows: '—',
-  },
-];
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000)   return 'Just now';
+  if (diff < 3600000)  return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 172800000) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 const statusConfig = {
   Ready: { color: '#4ADE80', bg: 'rgba(74,222,128,0.1)', border: 'rgba(74,222,128,0.2)' },
@@ -40,6 +29,28 @@ const statusConfig = {
 };
 
 const RecentDatasets = () => {
+  const [datasets, setDatasets] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  const fetchDatasets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/datasets`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setDatasets(data.datasets || []);
+      }
+    } catch (err) {
+      console.error("[RecentDatasets] fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDatasets();
+  }, [fetchDatasets]);
+
   return (
     <section style={styles.section}>
       {/* Section header */}
@@ -55,75 +66,96 @@ const RecentDatasets = () => {
 
       {/* Table card */}
       <div style={styles.card}>
-        {/* Table head */}
-        <div style={styles.tableHead}>
-          <span style={{ ...styles.col, flex: 3 }}>Dataset Name</span>
-          <span style={{ ...styles.col, flex: 2 }}>Upload Date</span>
-          <span style={{ ...styles.col, flex: 1 }}>Rows</span>
-          <span style={{ ...styles.col, flex: 1 }}>Status</span>
-          <span style={{ ...styles.col, flex: 1, textAlign: 'right' }}>Actions</span>
-        </div>
-
-        {/* Rows */}
-        {datasets.map((ds, i) => {
-          const sc = statusConfig[ds.status] || statusConfig.Ready;
-          return (
-            <div
-              key={ds.id}
-              style={{
-                ...styles.tableRow,
-                borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
-              }}
-              className="dataset-row"
-            >
-              {/* Name */}
-              <div style={{ ...styles.cellGroup, flex: 3 }}>
-                <div style={styles.fileIcon}>
-                  <Database size={13} color="rgba(108,99,255,0.7)" />
-                </div>
-                <span style={styles.fileName}>{ds.name}</span>
-              </div>
-
-              {/* Date */}
-              <span style={{ ...styles.cell, flex: 2 }}>{ds.uploadedAt}</span>
-
-              {/* Rows */}
-              <span style={{ ...styles.cell, flex: 1, fontFamily: 'monospace' }}>
-                {ds.rows}
-              </span>
-
-              {/* Status pill */}
-              <div style={{ flex: 1 }}>
-                <span
-                  style={{
-                    ...styles.statusPill,
-                    color: sc.color,
-                    backgroundColor: sc.bg,
-                    border: `1px solid ${sc.border}`,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: '50%',
-                      backgroundColor: sc.color,
-                      display: 'inline-block',
-                    }}
-                  />
-                  {ds.status}
-                </span>
-              </div>
-
-              {/* Action */}
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
-                <button style={styles.actionBtn} className="action-btn" title="View dataset">
-                  <Eye size={14} color="rgba(240,240,248,0.5)" />
-                </button>
-              </div>
+        {loading ? (
+          <div style={{ padding: '36px', textAlign: 'center', color: 'rgba(240,240,248,0.45)' }}>
+            <RefreshCw size={20} className="spin" style={{ marginBottom: '8px' }} />
+            <p style={{ margin: 0, fontSize: '13px' }}>Loading datasets…</p>
+          </div>
+        ) : datasets.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <Folder size={28} color="rgba(108,99,255,0.5)" style={{ marginBottom: '10px' }} />
+            <p style={{ color: '#F0F0F8', fontSize: '14px', fontWeight: '600', margin: '0 0 4px' }}>No datasets uploaded yet</p>
+            <p style={{ color: 'rgba(240,240,248,0.4)', fontSize: '12px', margin: '0 0 16px' }}>Upload a CSV or Excel dataset to start generating AI analysis.</p>
+            <Link to="/upload" style={styles.uploadBtn}>Upload Dataset</Link>
+          </div>
+        ) : (
+          <>
+            {/* Table head */}
+            <div style={styles.tableHead}>
+              <span style={{ ...styles.col, flex: 3 }}>Dataset Name</span>
+              <span style={{ ...styles.col, flex: 2 }}>Upload Date</span>
+              <span style={{ ...styles.col, flex: 1 }}>Rows</span>
+              <span style={{ ...styles.col, flex: 1 }}>Status</span>
+              <span style={{ ...styles.col, flex: 1, textAlign: 'right' }}>Actions</span>
             </div>
-          );
-        })}
+
+            {/* Rows */}
+            {datasets.slice(0, 4).map((ds, i) => {
+              const status = ds.status || 'Ready';
+              const sc = statusConfig[status] || statusConfig.Ready;
+              const name = ds.datasetName || ds.originalFilename || 'Dataset';
+              const dateStr = formatDate(ds.createdAt);
+              const rowsStr = ds.rowCount ? ds.rowCount.toLocaleString() : (ds.summary?.rows ? ds.summary.rows.toLocaleString() : '—');
+
+              return (
+                <div
+                  key={ds._id}
+                  style={{
+                    ...styles.tableRow,
+                    borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                  }}
+                  className="dataset-row"
+                >
+                  {/* Name */}
+                  <div style={{ ...styles.cellGroup, flex: 3 }}>
+                    <div style={styles.fileIcon}>
+                      <Database size={13} color="rgba(108,99,255,0.7)" />
+                    </div>
+                    <span style={styles.fileName}>{name}</span>
+                  </div>
+
+                  {/* Date */}
+                  <span style={{ ...styles.cell, flex: 2 }}>{dateStr}</span>
+
+                  {/* Rows */}
+                  <span style={{ ...styles.cell, flex: 1, fontFamily: 'monospace' }}>
+                    {rowsStr}
+                  </span>
+
+                  {/* Status pill */}
+                  <div style={{ flex: 1 }}>
+                    <span
+                      style={{
+                        ...styles.statusPill,
+                        color: sc.color,
+                        backgroundColor: sc.bg,
+                        border: `1px solid ${sc.border}`,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          backgroundColor: sc.color,
+                          display: 'inline-block',
+                        }}
+                      />
+                      {status}
+                    </span>
+                  </div>
+
+                  {/* Action */}
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Link to="/reports" style={styles.actionBtn} className="action-btn" title="View dataset reports">
+                      <Eye size={14} color="rgba(240,240,248,0.5)" />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
 
       <style>{`
@@ -134,6 +166,8 @@ const RecentDatasets = () => {
         .action-btn:hover svg { color: #6C63FF !important; }
         .view-all-link { transition: color 0.15s ease; }
         .view-all-link:hover { color: #7C73FF !important; }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
     </section>
   );

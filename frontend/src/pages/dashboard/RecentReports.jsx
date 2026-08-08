@@ -1,35 +1,50 @@
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, ArrowUpRight, ExternalLink, Trash2 } from 'lucide-react';
+import { FileText, ArrowUpRight, ExternalLink, RefreshCw, Folder } from 'lucide-react';
 
-// Placeholder data — replace with backend API response when ready.
-const reports = [
-  {
-    id: 'rpt-001',
-    title: 'Q3 Media Mix Attribution Report',
-    generatedAt: 'Today, 11:15 AM',
-    dataset: 'synthetic_mmm_weekly_india.csv',
-  },
-  {
-    id: 'rpt-002',
-    title: 'Customer Sentiment Executive Summary',
-    generatedAt: 'Yesterday, 4:02 PM',
-    dataset: 'q2_customer_sentiment_2024.csv',
-  },
-  {
-    id: 'rpt-003',
-    title: 'Brand Spend Channel Analysis — H1',
-    generatedAt: 'Jul 29, 9:55 AM',
-    dataset: 'brand_spend_channels_q3.xlsx',
-  },
-  {
-    id: 'rpt-004',
-    title: 'Incremental Lift Model — Pilot Run',
-    generatedAt: 'Jul 26, 6:30 PM',
-    dataset: 'media_mix_attribution_v2.csv',
-  },
-];
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000)   return 'Just now';
+  if (diff < 3600000)  return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 172800000) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 const RecentReports = () => {
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchReports = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/reports`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setReports(data.reports || []);
+      }
+    } catch (err) {
+      console.error("[RecentReports] fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchReports();
+  }, [fetchReports]);
+
   return (
     <section style={styles.section}>
       {/* Header */}
@@ -45,61 +60,79 @@ const RecentReports = () => {
 
       {/* Minimal table */}
       <div style={styles.card}>
-        {/* Head */}
-        <div style={styles.tableHead}>
-          <span style={{ ...styles.col, flex: 3 }}>Report Title</span>
-          <span style={{ ...styles.col, flex: 2 }}>Generated</span>
-          <span style={{ ...styles.col, flex: 2 }}>Dataset Used</span>
-          <span style={{ ...styles.col, flex: 1, textAlign: 'right' }}>Actions</span>
-        </div>
-
-        {/* Rows */}
-        {reports.map((rpt, i) => (
-          <div
-            key={rpt.id}
-            style={{
-              ...styles.row,
-              borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
-            }}
-            className="rr-row"
-          >
-            {/* Title */}
-            <div style={{ ...styles.cellGroup, flex: 3 }}>
-              <div style={styles.reportIcon}>
-                <FileText size={13} color="rgba(56,189,248,0.7)" />
-              </div>
-              <span style={styles.reportTitle}>{rpt.title}</span>
-            </div>
-
-            {/* Generated */}
-            <span style={{ ...styles.cell, flex: 2 }}>{rpt.generatedAt}</span>
-
-            {/* Dataset */}
-            <span
-              style={{
-                ...styles.cell,
-                flex: 2,
-                fontFamily: 'monospace',
-                fontSize: '11px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {rpt.dataset}
-            </span>
-
-            {/* Actions */}
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
-              <Link to={`/reports/${rpt.id}`} style={styles.iconBtn} className="rr-btn" title="Open">
-                <ExternalLink size={13} color="rgba(240,240,248,0.5)" />
-              </Link>
-              <button style={styles.iconBtn} className="rr-btn rr-del-btn" title="Delete">
-                <Trash2 size={13} color="rgba(248,113,113,0.5)" />
-              </button>
-            </div>
+        {loading ? (
+          <div style={{ padding: '36px', textAlign: 'center', color: 'rgba(240,240,248,0.45)' }}>
+            <RefreshCw size={20} className="spin" style={{ marginBottom: '8px' }} />
+            <p style={{ margin: 0, fontSize: '13px' }}>Loading reports…</p>
           </div>
-        ))}
+        ) : reports.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <Folder size={28} color="rgba(56,189,248,0.5)" style={{ marginBottom: '10px' }} />
+            <p style={{ color: '#F0F0F8', fontSize: '14px', fontWeight: '600', margin: '0 0 4px' }}>No reports generated yet</p>
+            <p style={{ color: 'rgba(240,240,248,0.4)', fontSize: '12px', margin: '0 0 16px' }}>Generate executive reports automatically by uploading a dataset.</p>
+            <Link to="/upload" style={styles.uploadBtn}>Generate Report</Link>
+          </div>
+        ) : (
+          <>
+            {/* Head */}
+            <div style={styles.tableHead}>
+              <span style={{ ...styles.col, flex: 3 }}>Report Title</span>
+              <span style={{ ...styles.col, flex: 2 }}>Generated</span>
+              <span style={{ ...styles.col, flex: 2 }}>Dataset Used</span>
+              <span style={{ ...styles.col, flex: 1, textAlign: 'right' }}>Actions</span>
+            </div>
+
+            {/* Rows */}
+            {reports.slice(0, 4).map((rpt, i) => {
+              const datasetName = rpt.datasetId?.datasetName || rpt.datasetId?.originalFilename || 'Dataset';
+              const dateStr = formatDate(rpt.createdAt || rpt.generatedAt);
+
+              return (
+                <div
+                  key={rpt._id}
+                  style={{
+                    ...styles.row,
+                    borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.05)',
+                  }}
+                  className="rr-row"
+                >
+                  {/* Title */}
+                  <div style={{ ...styles.cellGroup, flex: 3 }}>
+                    <div style={styles.reportIcon}>
+                      <FileText size={13} color="rgba(56,189,248,0.7)" />
+                    </div>
+                    <span style={styles.reportTitle}>{rpt.title}</span>
+                  </div>
+
+                  {/* Generated */}
+                  <span style={{ ...styles.cell, flex: 2 }}>{dateStr}</span>
+
+                  {/* Dataset */}
+                  <span
+                    style={{
+                      ...styles.cell,
+                      flex: 2,
+                      fontFamily: 'monospace',
+                      fontSize: '11px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {datasetName}
+                  </span>
+
+                  {/* Actions */}
+                  <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                    <Link to={`/reports/${rpt._id}`} style={styles.iconBtn} className="rr-btn" title="Open">
+                      <ExternalLink size={13} color="rgba(240,240,248,0.5)" />
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
       </div>
 
       <style>{`
@@ -107,9 +140,10 @@ const RecentReports = () => {
         .rr-row:hover { background: rgba(255,255,255,0.025) !important; }
         .rr-btn { transition: background 0.15s ease; }
         .rr-btn:hover { background: rgba(56,189,248,0.12) !important; }
-        .rr-del-btn:hover { background: rgba(248,113,113,0.12) !important; }
         .rr-view-all { transition: color 0.15s ease; }
         .rr-view-all:hover { color: #5BB8F5 !important; }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
     </section>
   );

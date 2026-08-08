@@ -1,76 +1,110 @@
-import { UploadCloud, FileText, MessageSquare, Download, Sparkles } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { UploadCloud, FileText, MessageSquare, RefreshCw, Folder } from 'lucide-react';
 
-// Placeholder data — replace with backend API response when ready.
-const events = [
-  {
-    id: 'evt-001',
-    type: 'upload',
-    label: 'Dataset Uploaded',
-    detail: 'synthetic_mmm_weekly_india.csv',
-    time: 'Today · 10:42 AM',
-    icon: UploadCloud,
-    color: '#6C63FF',
-    bg: 'rgba(108,99,255,0.12)',
-    border: 'rgba(108,99,255,0.25)',
-  },
-  {
-    id: 'evt-002',
-    type: 'report',
-    label: 'AI Report Generated',
-    detail: 'Q3 Media Mix Attribution Report',
-    time: 'Today · 11:15 AM',
-    icon: Sparkles,
-    color: '#38BDF8',
-    bg: 'rgba(56,189,248,0.1)',
-    border: 'rgba(56,189,248,0.22)',
-  },
-  {
-    id: 'evt-003',
-    type: 'chat',
-    label: 'Chat Session Started',
-    detail: 'Which channel delivered the highest incremental ROI?',
-    time: 'Today · 11:30 AM',
-    icon: MessageSquare,
-    color: '#4ADE80',
-    bg: 'rgba(74,222,128,0.1)',
-    border: 'rgba(74,222,128,0.22)',
-  },
-  {
-    id: 'evt-004',
-    type: 'report',
-    label: 'AI Report Generated',
-    detail: 'Customer Sentiment Executive Summary',
-    time: 'Yesterday · 4:02 PM',
-    icon: Sparkles,
-    color: '#38BDF8',
-    bg: 'rgba(56,189,248,0.1)',
-    border: 'rgba(56,189,248,0.22)',
-  },
-  {
-    id: 'evt-005',
-    type: 'download',
-    label: 'Report Downloaded',
-    detail: 'Q3 Media Mix Attribution Report · PDF',
-    time: 'Yesterday · 5:00 PM',
-    icon: Download,
-    color: '#FB923C',
-    bg: 'rgba(251,146,60,0.1)',
-    border: 'rgba(251,146,60,0.22)',
-  },
-  {
-    id: 'evt-006',
-    type: 'upload',
-    label: 'Dataset Uploaded',
-    detail: 'brand_spend_channels_q3.xlsx',
-    time: 'Jul 29 · 9:05 AM',
-    icon: UploadCloud,
-    color: '#6C63FF',
-    bg: 'rgba(108,99,255,0.12)',
-    border: 'rgba(108,99,255,0.25)',
-  },
-];
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000)   return 'Just now';
+  if (diff < 3600000)  return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 172800000) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 const ActivityTimeline = () => {
+  const [events, setEvents]   = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchTimeline = useCallback(async () => {
+    setLoading(true);
+    try {
+      const headers = authHeaders();
+
+      // Fetch datasets, reports, and sessions concurrently
+      const [dsRes, rptRes, chatRes] = await Promise.all([
+        fetch(`${API}/datasets`, { headers }).then(r => r.json()).catch(() => ({ success: false })),
+        fetch(`${API}/reports`, { headers }).then(r => r.json()).catch(() => ({ success: false })),
+        fetch(`${API}/chat/sessions`, { headers }).then(r => r.json()).catch(() => ({ success: false })),
+      ]);
+
+      const items = [];
+
+      // Datasets events
+      if (dsRes.success && Array.isArray(dsRes.datasets)) {
+        dsRes.datasets.forEach(ds => {
+          items.push({
+            id: `ds-${ds._id}`,
+            timestamp: new Date(ds.createdAt).getTime(),
+            label: 'Dataset Uploaded',
+            detail: ds.datasetName || ds.originalFilename || 'Dataset',
+            time: formatDate(ds.createdAt),
+            icon: UploadCloud,
+            color: '#6C63FF',
+            bg: 'rgba(108,99,255,0.12)',
+            border: 'rgba(108,99,255,0.25)',
+          });
+        });
+      }
+
+      // Report events
+      if (rptRes.success && Array.isArray(rptRes.reports)) {
+        rptRes.reports.forEach(rpt => {
+          items.push({
+            id: `rpt-${rpt._id}`,
+            timestamp: new Date(rpt.createdAt || rpt.generatedAt).getTime(),
+            label: 'AI Report Generated',
+            detail: rpt.title || 'Executive Report',
+            time: formatDate(rpt.createdAt || rpt.generatedAt),
+            icon: FileText,
+            color: '#38BDF8',
+            bg: 'rgba(56,189,248,0.1)',
+            border: 'rgba(56,189,248,0.22)',
+          });
+        });
+      }
+
+      // Chat session events
+      if (chatRes.success && Array.isArray(chatRes.sessions)) {
+        chatRes.sessions.forEach(sess => {
+          items.push({
+            id: `chat-${sess.sessionId}`,
+            timestamp: new Date(sess.lastMsgAt || sess.createdAt).getTime(),
+            label: 'Chat Session',
+            detail: sess.title || 'AI Chat Session',
+            time: formatDate(sess.lastMsgAt || sess.createdAt),
+            icon: MessageSquare,
+            color: '#4ADE80',
+            bg: 'rgba(74,222,128,0.1)',
+            border: 'rgba(74,222,128,0.22)',
+          });
+        });
+      }
+
+      // Sort newest first
+      items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      setEvents(items.slice(0, 6));
+
+    } catch (err) {
+      console.error("[ActivityTimeline] fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTimeline();
+  }, [fetchTimeline]);
+
   return (
     <section style={styles.section}>
       {/* Header */}
@@ -81,43 +115,59 @@ const ActivityTimeline = () => {
 
       {/* Timeline */}
       <div style={styles.card}>
-        <div style={styles.timeline}>
-          {events.map((evt, i) => {
-            const Icon = evt.icon;
-            const isLast = i === events.length - 1;
+        {loading ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'rgba(240,240,248,0.45)' }}>
+            <RefreshCw size={20} className="spin" style={{ marginBottom: '8px' }} />
+            <p style={{ margin: 0, fontSize: '13px' }}>Loading timeline…</p>
+          </div>
+        ) : events.length === 0 ? (
+          <div style={{ padding: '36px 20px', textAlign: 'center' }}>
+            <Folder size={26} color="rgba(251,146,60,0.5)" style={{ marginBottom: '10px' }} />
+            <p style={{ color: '#F0F0F8', fontSize: '14px', fontWeight: '600', margin: '0 0 4px' }}>No recent activity</p>
+            <p style={{ color: 'rgba(240,240,248,0.4)', fontSize: '12px', margin: 0 }}>Activity will appear here after you upload datasets and run analysis.</p>
+          </div>
+        ) : (
+          <div style={styles.timeline}>
+            {events.map((evt, i) => {
+              const Icon = evt.icon;
+              const isLast = i === events.length - 1;
 
-            return (
-              <div key={evt.id} style={styles.item}>
-                {/* Spine column */}
-                <div style={styles.spineCol}>
-                  {/* Icon node */}
-                  <div
-                    style={{
-                      ...styles.node,
-                      backgroundColor: evt.bg,
-                      border: `1px solid ${evt.border}`,
-                    }}
-                  >
-                    <Icon size={13} color={evt.color} />
+              return (
+                <div key={evt.id} style={styles.item}>
+                  {/* Spine column */}
+                  <div style={styles.spineCol}>
+                    <div
+                      style={{
+                        ...styles.node,
+                        backgroundColor: evt.bg,
+                        border: `1px solid ${evt.border}`,
+                      }}
+                    >
+                      <Icon size={13} color={evt.color} />
+                    </div>
+
+                    {!isLast && <div style={styles.connector} />}
                   </div>
 
-                  {/* Vertical connector (hidden on last item) */}
-                  {!isLast && <div style={styles.connector} />}
-                </div>
-
-                {/* Content column */}
-                <div style={{ ...styles.content, paddingBottom: isLast ? 0 : '28px' }}>
-                  <div style={styles.topRow}>
-                    <span style={styles.label}>{evt.label}</span>
-                    <span style={styles.time}>{evt.time}</span>
+                  {/* Content column */}
+                  <div style={{ ...styles.content, paddingBottom: isLast ? 0 : '28px' }}>
+                    <div style={styles.topRow}>
+                      <span style={styles.label}>{evt.label}</span>
+                      <span style={styles.time}>{evt.time}</span>
+                    </div>
+                    <p style={styles.detail}>{evt.detail}</p>
                   </div>
-                  <p style={styles.detail}>{evt.detail}</p>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      <style>{`
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+      `}</style>
     </section>
   );
 };

@@ -1,35 +1,50 @@
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageSquare, ArrowUpRight, ExternalLink } from 'lucide-react';
+import { MessageSquare, ArrowUpRight, ExternalLink, RefreshCw, Folder } from 'lucide-react';
 
-// Placeholder data — replace with backend API response when ready.
-const conversations = [
-  {
-    id: 'chat-001',
-    question: 'Which marketing channel delivered the highest incremental ROI in Q3?',
-    time: 'Today, 11:30 AM',
-    messages: 14,
-  },
-  {
-    id: 'chat-002',
-    question: 'Summarise the adstock decay rates for TV and Digital spend.',
-    time: 'Today, 9:15 AM',
-    messages: 8,
-  },
-  {
-    id: 'chat-003',
-    question: 'What is the saturation curve for Social Media spend in our model?',
-    time: 'Yesterday, 5:45 PM',
-    messages: 22,
-  },
-  {
-    id: 'chat-004',
-    question: 'Compare Q2 vs Q3 attribution across all five spend channels.',
-    time: 'Jul 29, 3:10 PM',
-    messages: 17,
-  },
-];
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const now = new Date();
+  const diff = now - d;
+  if (diff < 60000)   return 'Just now';
+  if (diff < 3600000)  return `${Math.floor(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
+  if (diff < 172800000) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 const RecentChats = () => {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  const fetchSessions = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/chat/sessions`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSessions(data.sessions || []);
+      }
+    } catch (err) {
+      console.error("[RecentChats] fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
   return (
     <section style={styles.section}>
       {/* Header */}
@@ -45,39 +60,53 @@ const RecentChats = () => {
 
       {/* Conversation cards */}
       <div style={styles.list}>
-        {conversations.map((chat) => (
-          <div key={chat.id} style={styles.card} className="rc-card">
-            {/* Left icon */}
-            <div style={styles.iconWrap}>
-              <MessageSquare size={15} color="rgba(74,222,128,0.7)" />
-            </div>
-
-            {/* Content */}
-            <div style={styles.body}>
-              <p style={styles.question}>"{chat.question}"</p>
-              <div style={styles.meta}>
-                <span style={styles.metaChip}>
-                  <span
-                    style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: '50%',
-                      backgroundColor: '#4ADE80',
-                      display: 'inline-block',
-                    }}
-                  />
-                  {chat.messages} messages
-                </span>
-                <span style={styles.time}>{chat.time}</span>
-              </div>
-            </div>
-
-            {/* Open action */}
-            <Link to="/chat" style={styles.openBtn} className="rc-open-btn" title="Open chat">
-              <ExternalLink size={14} color="rgba(240,240,248,0.4)" />
-            </Link>
+        {loading ? (
+          <div style={{ padding: '32px', textAlign: 'center', color: 'rgba(240,240,248,0.45)', backgroundColor: '#121218', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <RefreshCw size={20} className="spin" style={{ marginBottom: '8px' }} />
+            <p style={{ margin: 0, fontSize: '13px' }}>Loading conversations…</p>
           </div>
-        ))}
+        ) : sessions.length === 0 ? (
+          <div style={{ padding: '36px 20px', textAlign: 'center', backgroundColor: '#121218', borderRadius: '14px', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <Folder size={26} color="rgba(74,222,128,0.5)" style={{ marginBottom: '10px' }} />
+            <p style={{ color: '#F0F0F8', fontSize: '14px', fontWeight: '600', margin: '0 0 4px' }}>No conversations yet</p>
+            <p style={{ color: 'rgba(240,240,248,0.4)', fontSize: '12px', margin: '0 0 14px' }}>Ask questions about your uploaded datasets to start an AI chat session.</p>
+            <Link to="/chat" style={styles.chatBtn}>Start AI Chat</Link>
+          </div>
+        ) : (
+          sessions.slice(0, 4).map((chat) => (
+            <div key={chat.sessionId || chat._id} style={styles.card} className="rc-card">
+              {/* Left icon */}
+              <div style={styles.iconWrap}>
+                <MessageSquare size={15} color="rgba(74,222,128,0.7)" />
+              </div>
+
+              {/* Content */}
+              <div style={styles.body}>
+                <p style={styles.question}>"{chat.title || 'Conversational Chat'}"</p>
+                <div style={styles.meta}>
+                  <span style={styles.metaChip}>
+                    <span
+                      style={{
+                        width: 5,
+                        height: 5,
+                        borderRadius: '50%',
+                        backgroundColor: '#4ADE80',
+                        display: 'inline-block',
+                      }}
+                    />
+                    {chat.msgCount || 1} messages
+                  </span>
+                  <span style={styles.time}>{formatDate(chat.lastMsgAt || chat.createdAt)}</span>
+                </div>
+              </div>
+
+              {/* Open action */}
+              <Link to={`/chat?session=${chat.sessionId}`} style={styles.openBtn} className="rc-open-btn" title="Open chat">
+                <ExternalLink size={14} color="rgba(240,240,248,0.4)" />
+              </Link>
+            </div>
+          ))
+        )}
       </div>
 
       <style>{`
@@ -88,6 +117,8 @@ const RecentChats = () => {
         .rc-open-btn:hover svg { color: #4ADE80 !important; }
         .rc-view-all { transition: color 0.15s ease; }
         .rc-view-all:hover { color: #6AEA90 !important; }
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
       `}</style>
     </section>
   );

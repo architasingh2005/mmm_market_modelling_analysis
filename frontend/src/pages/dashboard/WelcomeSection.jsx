@@ -1,7 +1,38 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { UploadCloud, MessageSquare, ArrowRight } from 'lucide-react';
+import { useCurrentUser } from '../../services/useCurrentUser';
+
+const API = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api';
+
+function authHeaders() {
+  const token = localStorage.getItem('token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 const WelcomeSection = () => {
+  const { user } = useCurrentUser();
+  const [stats, setStats] = useState({ datasets: 0, reports: 0 });
+
+  useEffect(() => {
+    async function loadStats() {
+      try {
+        const headers = authHeaders();
+        const [dsRes, rptRes] = await Promise.all([
+          fetch(`${API}/datasets`, { headers }).then(r => r.json()).catch(() => ({})),
+          fetch(`${API}/reports`, { headers }).then(r => r.json()).catch(() => ({})),
+        ]);
+        setStats({
+          datasets: dsRes.datasets ? dsRes.datasets.length : 0,
+          reports: rptRes.reports ? rptRes.reports.length : 0,
+        });
+      } catch (err) {
+        console.error("WelcomeStats error:", err);
+      }
+    }
+    loadStats();
+  }, []);
+
   return (
     <section style={styles.wrapper}>
       {/* Left — copy */}
@@ -9,7 +40,7 @@ const WelcomeSection = () => {
         <span style={styles.eyebrow}>AI-Powered Business Intelligence</span>
 
         <h1 style={styles.heading}>
-          Welcome Back&nbsp;
+          Welcome Back{user?.name ? `, ${user.name}` : ''}&nbsp;
           <span role="img" aria-label="wave">👋</span>
         </h1>
 
@@ -44,23 +75,23 @@ const WelcomeSection = () => {
         <div style={styles.glassCard}>
           <div style={styles.glassRow}>
             <span style={styles.glassDot('#6C63FF')} />
-            <span style={styles.glassLabel}>AI Report Generated</span>
-            <span style={styles.glassTime}>just now</span>
+            <span style={styles.glassLabel}>Active Workspace</span>
+            <span style={styles.glassTime}>Live</span>
           </div>
           <div style={styles.glassRow}>
             <span style={styles.glassDot('#4ADE80')} />
-            <span style={styles.glassLabel}>Dataset Validated</span>
-            <span style={styles.glassTime}>2m ago</span>
+            <span style={styles.glassLabel}>Datasets Uploaded</span>
+            <span style={styles.glassTime}>{stats.datasets}</span>
           </div>
           <div style={styles.glassRow}>
             <span style={styles.glassDot('#38BDF8')} />
-            <span style={styles.glassLabel}>RAG Chat Session</span>
-            <span style={styles.glassTime}>5m ago</span>
+            <span style={styles.glassLabel}>Reports Generated</span>
+            <span style={styles.glassTime}>{stats.reports}</span>
           </div>
           <div style={styles.glassRow}>
-            <span style={styles.glassDot('#FB923C')} />
-            <span style={styles.glassLabel}>Report Downloaded</span>
-            <span style={styles.glassTime}>12m ago</span>
+            <span style={styles.glassDot('#A78BFA')} />
+            <span style={styles.glassLabel}>RAG Service Engine</span>
+            <span style={styles.glassTime}>Ready</span>
           </div>
         </div>
       </div>
