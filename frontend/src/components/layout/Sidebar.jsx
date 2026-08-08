@@ -35,8 +35,8 @@ const NAV_SECTIONS = [
     id: 'misc',
     label: 'General',
     items: [
-      { id: 'about',    label: 'About',    icon: Info,     to: '/about'    },
-      { id: 'settings', label: 'Settings', icon: Settings, to: '/profile'  },
+      { id: 'profile', label: 'Profile', icon: User, to: '/profile' },
+      { id: 'about',   label: 'About',   icon: Info, to: '/about'   },
     ],
   },
 ];

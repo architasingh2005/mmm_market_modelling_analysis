@@ -256,8 +256,7 @@ const ProfileMenu = () => {
   }, []);
 
   const menuItems = [
-    { label: 'Profile',  icon: User,     to: '/profile' },
-    { label: 'Settings', icon: Settings, to: '/profile' },
+    { label: 'My Profile', icon: User, to: '/profile' },
   ];
 
   const handleLogout = () => {
