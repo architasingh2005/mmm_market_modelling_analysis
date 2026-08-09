@@ -17,7 +17,8 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 import User from '../models/userModel.js';
 
 async function runDualProfilePictureTest() {
-  const mongoUri = process.env.MONGODB_URL || 'mongodb+srv://shivansh:shivansh1965@cluster0.x9sk2.mongodb.net/marketmind_ai';
+  const mongoUri = process.env.MONGODB_URL;
+  if (!mongoUri) throw new Error('MONGODB_URL environment variable is not set. Add it to your .env file.');
   console.log(`Connecting to MongoDB...`);
   await mongoose.connect(mongoUri);
 
