@@ -19,7 +19,8 @@ import Report from '../models/reportModel.js';
 import ChatHistory from '../models/chatHistoryModel.js';
 
 async function runProfileTest() {
-  const mongoUri = process.env.MONGODB_URL || 'mongodb+srv://shivansh:shivansh1965@cluster0.x9sk2.mongodb.net/marketmind_ai';
+  const mongoUri = process.env.MONGODB_URL;
+  if (!mongoUri) throw new Error('MONGODB_URL environment variable is not set. Add it to your .env file.');
   console.log(`Connecting to MongoDB at ${mongoUri.replace(/:([^@]+)@/, ':***@')}...`);
   await mongoose.connect(mongoUri);
 
